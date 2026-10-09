@@ -1,12 +1,12 @@
 name: release
 
-# Pushing a v<version> tag builds the unsigned .b3 with the same b3-builder pin as pr-build and
+# Pushing a plugin-<name>-v<version> tag (the shape b3-builder reads) builds the unsigned .b3 with the same b3-builder pin as pr-build and
 # attaches it to a GitHub pre-release on this repo. It signs nothing and registers nothing in any
 # Bespok3d index: the package sideloads as coming from an unknown publisher.
 on:
   push:
     tags:
-      - 'v*'
+      - 'plugin-*-v*'
 
 jobs:
   release:
@@ -32,6 +32,6 @@ jobs:
         run: |
           gh release create "$TAG" dist/*.b3 \
             --repo "${{ github.repository }}" \
-            --title "Plan B $TAG" \
+            --title "Plan B ${TAG##*-v}" \
             --prerelease \
             --notes-file doc/CHANGELOG.md
