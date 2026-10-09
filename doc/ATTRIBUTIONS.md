@@ -1,4 +1,4 @@
-# Attributions - u1-paxx-ab
+# Attributions - u1-plan-b
 
 **Plugin author:** justinh-rahb
 

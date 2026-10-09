@@ -1,5 +1,5 @@
 #!/bin/sh
-# Regression tests for files/bin/paxx-ab-run and paxx-ab-flipback, run against fake updateEngine,
+# Regression tests for files/bin/plan-b-run and plan-b-flipback, run against fake updateEngine,
 # upfileUnpack, curl, df and reboot (no printer, no eMMC, no root, no network). Every fake logs its
 # arguments to one file, so each test asserts on exactly what would have touched the device.
 # The fakes are written out as shell source, so their $ must not expand here.
@@ -10,8 +10,8 @@ set -eu
 TEST_SH="${TEST_SH:-sh}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-RUN="$HERE/../files/bin/paxx-ab-run"
-FLIPBACK="$HERE/../files/bin/paxx-ab-flipback"
+RUN="$HERE/../files/bin/plan-b-run"
+FLIPBACK="$HERE/../files/bin/plan-b-flipback"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -65,9 +65,9 @@ reset() {
   : > "$WORK/oem/.printer_data"
   : > "$CALLS"
   echo "console=ttyFIQ0 android_slotsufix=_a rootwait" > "$WORK/cmdline"
-  PAXX_AB_CMDLINE="$WORK/cmdline" PAXX_AB_OEM="$WORK/oem" PAXX_AB_WORK="$WORK/userdata/.paxx-ab"
-  PAXX_AB_STATE="$WORK/state" PAXX_AB_MOONRAKER_WAIT=10 FAKE_PRINT_STATE=standby
-  export PAXX_AB_CMDLINE PAXX_AB_OEM PAXX_AB_WORK PAXX_AB_STATE PAXX_AB_MOONRAKER_WAIT FAKE_PRINT_STATE
+  PLAN_B_CMDLINE="$WORK/cmdline" PLAN_B_OEM="$WORK/oem" PLAN_B_WORK="$WORK/userdata/.plan-b"
+  PLAN_B_STATE="$WORK/state" PLAN_B_MOONRAKER_WAIT=10 FAKE_PRINT_STATE=standby
+  export PLAN_B_CMDLINE PLAN_B_OEM PLAN_B_WORK PLAN_B_STATE PLAN_B_MOONRAKER_WAIT FAKE_PRINT_STATE
   unset FAKE_NO_UPDATE_IMG FAKE_UPDATE_FAIL FAKE_FREE_KB
 }
 run() { $TEST_SH "$RUN" "$@" > "$WORK/out" 2>&1; }
@@ -84,14 +84,14 @@ refuses() {
 # 1. flash on slot _a: downloads, writes with the stock command, clears the stock flags, reboots.
 reset
 run flash "$URL" "$SHA" || fail "flash failed: $(cat "$WORK/out")"
-grep -q "^updateEngine --image_url=$WORK/userdata/.paxx-ab/unpack/update.img --update$" "$CALLS" \
+grep -q "^updateEngine --image_url=$WORK/userdata/.plan-b/unpack/update.img --update$" "$CALLS" \
   || fail "updateEngine not called as systemUpgrade.sh does: $(cat "$CALLS")"
 called reboot || fail "no reboot after a successful write"
 if [ -e "$WORK/oem/.debug" ] || [ -e "$WORK/oem/.printer_data" ]; then
   fail "stock pre-activate flags not cleared"
 fi
 [ "$(cat "$WORK/state/written-$SHA")" = "_b" ] || fail "done marker missing or not slot _b"
-[ ! -e "$WORK/userdata/.paxx-ab" ] || fail "work dir left behind"
+[ ! -e "$WORK/userdata/.plan-b" ] || fail "work dir left behind"
 grep -q "will write slot _b" "$WORK/out" || fail "slot _a did not target _b"
 
 # 2. The same package at the next boot: nothing at all runs.
@@ -126,7 +126,7 @@ reset; FAKE_PRINT_STATE=paused; refuses "paused" flash "$URL" "$SHA"
 reset; FAKE_PRINT_STATE=""; refuses "Moonraker down" flash "$URL" "$SHA"
 reset; FAKE_FREE_KB=1000; export FAKE_FREE_KB; refuses "low disk" flash "$URL" "$SHA"
 reset; refuses "sha mismatch" flash "$URL" "$BAD_SHA"
-[ ! -e "$WORK/userdata/.paxx-ab" ] || fail "sha mismatch left the download behind"
+[ ! -e "$WORK/userdata/.plan-b" ] || fail "sha mismatch left the download behind"
 reset; FAKE_NO_UPDATE_IMG=1; export FAKE_NO_UPDATE_IMG; refuses "no update.img" flash "$URL" "$SHA"
 
 # 6. updateEngine fails: no reboot, no marker, flags untouched.
@@ -149,4 +149,4 @@ reset
 echo "console=ttyFIQ0" > "$WORK/cmdline"
 if $TEST_SH "$FLIPBACK" --yes > /dev/null 2>&1; then fail "flipback ran without a slot suffix"; fi
 
-echo "All paxx-ab tests passed."
+echo "All plan-b tests passed."

@@ -1,5 +1,5 @@
 #!/bin/sh
-# paxx-ab-run <mode> <image-url> <sha256>: downloads a paxx12 Extended Firmware upgrade package,
+# plan-b-run <mode> <image-url> <sha256>: downloads a paxx12 Extended Firmware upgrade package,
 # verifies it, writes its system image to the U1's non-booted A/B slot with the stock updater, and
 # reboots into it. <mode> is `dry-run` (every check and the download, but nothing is written to a
 # partition) or `flash`.
@@ -24,7 +24,7 @@
 # Runs as root under the Bespok3d daemon as a managed service that starts at every boot, so it is
 # idempotent: once a package with this sha256 has been written, later runs exit at once.
 #
-# Test seams: PAXX_AB_CMDLINE, PAXX_AB_OEM, PAXX_AB_WORK and PAXX_AB_STATE override the paths below,
+# Test seams: PLAN_B_CMDLINE, PLAN_B_OEM, PLAN_B_WORK and PLAN_B_STATE override the paths below,
 # and every tool it calls is found on PATH.
 set -u
 
@@ -32,19 +32,19 @@ MODE="${1:-}"
 IMAGE_URL="${2:-}"
 IMAGE_SHA256="${3:-}"
 
-CMDLINE="${PAXX_AB_CMDLINE:-/proc/cmdline}"
-OEM_DIR="${PAXX_AB_OEM:-/oem}"
-WORK_DIR="${PAXX_AB_WORK:-/userdata/.paxx-ab}"
-STATE_DIR="${PAXX_AB_STATE:-/userdata/bespok3d/var/lib/u1-paxx-ab}"
-MOONRAKER_URL="${PAXX_AB_MOONRAKER:-http://127.0.0.1:7125}"
+CMDLINE="${PLAN_B_CMDLINE:-/proc/cmdline}"
+OEM_DIR="${PLAN_B_OEM:-/oem}"
+WORK_DIR="${PLAN_B_WORK:-/userdata/.plan-b}"
+STATE_DIR="${PLAN_B_STATE:-/userdata/bespok3d/var/lib/u1-plan-b}"
+MOONRAKER_URL="${PLAN_B_MOONRAKER:-http://127.0.0.1:7125}"
 # Seconds to wait for Moonraker to answer at boot before giving up without flashing.
-MOONRAKER_WAIT="${PAXX_AB_MOONRAKER_WAIT:-120}"
+MOONRAKER_WAIT="${PLAN_B_MOONRAKER_WAIT:-120}"
 # The package is ~250 MB and unpacks to about the same again.
 MIN_FREE_KB=700000
 URL_PREFIX="https://github.com/paxx12/SnapmakerU1/releases/download/"
 
-log() { echo "paxx-ab-run: $*"; }
-die() { echo "paxx-ab-run: $*" >&2; exit 1; }
+log() { echo "plan-b-run: $*"; }
+die() { echo "plan-b-run: $*" >&2; exit 1; }
 
 case "$MODE" in
   dry-run | flash) ;;

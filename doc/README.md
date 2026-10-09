@@ -1,6 +1,7 @@
-# Paxx A/B Flip
+# Plan B
 
-Installs paxx12's [Extended Firmware](https://github.com/paxx12/SnapmakerU1) on a Snapmaker U1 from the
+No terminal, no custom firmware: Bespok3d ships neither, and neither does this plugin. It asks the U1's
+stock updater to install paxx12's [Extended Firmware](https://github.com/paxx12/SnapmakerU1) from the
 Bespok3d app, without a USB stick, and boots into it. The system you were running stays in the other slot.
 
 > **Status: untested on a printer.** Everything below is what the scripts do against fakes. Do not set
@@ -15,7 +16,7 @@ firmware by writing the slot that is not running, marking it active, and rebooti
 
 ## What it does
 
-On install (and at every boot until it has written the package once), the `u1-paxx-ab` service:
+On install (and at every boot until it has written the package once), the `u1-plan-b` service:
 
 1. Reads the running slot from `/proc/cmdline` and refuses if there is none.
 2. Asks Moonraker for the print state and refuses unless it is `standby`, `complete`, `cancelled` or
@@ -45,7 +46,7 @@ The MCUs are not flashed by this plugin. The new system's Klipper start script r
 Over SSH, as root:
 
 ```sh
-/userdata/bespok3d/bin/paxx-ab-flipback --yes
+/userdata/bespok3d/bin/plan-b-flipback --yes
 ```
 
 It marks the other slot active with the stock `updateEngine --misc=other` and reboots. This only works
@@ -53,7 +54,7 @@ while the other slot still holds the system you left: any later firmware update 
 
 ## Things to know
 
-- **Logs** are in `/userdata/bespok3d/var/log/u1-paxx-ab.log`.
+- **Logs** are in `/userdata/bespok3d/var/log/u1-plan-b.log`.
 - `/oem/.debug` is removed on `flash`, as every stock firmware update does, so persisted `/etc` changes
   are reset.
 - Whether Bespok3d itself is still running after the reboot into Extended Firmware is not yet verified.

@@ -20,11 +20,11 @@ fi
 cd "$REPO_ROOT" || exit 1
 
 echo ""
-echo "u1-paxx-ab gate"
+echo "u1-plan-b gate"
 
 # The scripts are shell, so their suite is shell too: it runs them against fake updateEngine,
 # upfileUnpack, curl, df and reboot, with no printer, no eMMC and no root.
-run_check "paxx-ab tests" sh "$REPO_ROOT/tests/run.sh"
+run_check "plan-b tests" sh "$REPO_ROOT/tests/run.sh"
 # The scripts have no .sh extension (they are placed as system-bins), so shellcheck_repo below would
 # not find them on its own.
 if command -v shellcheck > /dev/null 2>&1; then

@@ -33,7 +33,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: u1-paxx-ab-b3
+          name: u1-plan-b-b3
           path: |
             dist/*.b3
             dist/*.atom.json
