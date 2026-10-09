@@ -1,0 +1,37 @@
+name: release
+
+# Pushing a v<version> tag builds the unsigned .b3 with the same b3-builder pin as pr-build and
+# attaches it to a GitHub pre-release on this repo. It signs nothing and registers nothing in any
+# Bespok3d index: the package sideloads as coming from an unknown publisher.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the release and upload the .b3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse a tag that does not match manifest.json
+        run: sh scripts/tag_version_guard.sh "${{ github.ref_name }}"
+
+      - uses: Bespok3d/b3-builder@cbd9fa107cb82699603d4f1f3e7884b514c5e1e6
+        with:
+          unit: plugin
+          publish: 'false'
+          atom-repo: ${{ github.repository }}
+
+      - name: Publish the .b3 as a pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/*.b3 \
+            --repo "${{ github.repository }}" \
+            --title "Plan B $TAG" \
+            --prerelease \
+            --notes-file doc/CHANGELOG.md
