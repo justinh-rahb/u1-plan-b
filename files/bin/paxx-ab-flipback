@@ -1,0 +1,33 @@
+#!/bin/sh
+# paxx-ab-flipback --yes: marks the U1's other A/B slot active and reboots into it, the way back to
+# the system that was running before paxx-ab-run wrote the new one. Nothing is written except the
+# misc partition's slot flags, through the stock `updateEngine --misc=other` ("Linux A/B mode:
+# Setting another partition to bootable", from its own usage text).
+#
+# Only safe while the other slot still holds a working system: paxx-ab-run never touches the slot it
+# runs from, but any later firmware update (USB, OTA, or paxx-ab-run again) overwrites the other one.
+set -u
+
+CMDLINE="${PAXX_AB_CMDLINE:-/proc/cmdline}"
+
+die() { echo "paxx-ab-flipback: $*" >&2; exit 1; }
+
+[ "${1:-}" = "--yes" ] || die "reboots the printer into the other slot; pass --yes to do it"
+
+slot=""
+# shellcheck disable=SC2013 # the command line is one line of space-separated words
+for word in $(cat "$CMDLINE"); do
+  case "$word" in
+    android_slotsufix=* | androidboot.slot_suffix=*) slot="${word#*=}" ;;
+  esac
+done
+case "$slot" in
+  _a | _b) ;;
+  *) die "no A/B slot suffix on $CMDLINE, refusing" ;;
+esac
+
+updateEngine --misc=other || die "updateEngine --misc=other failed; nothing changed"
+updateEngine --misc=display || true
+sync
+echo "paxx-ab-flipback: left slot $slot, rebooting into the other one"
+reboot

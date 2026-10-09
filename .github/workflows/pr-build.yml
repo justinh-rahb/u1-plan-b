@@ -1,0 +1,40 @@
+name: pr-build
+
+# Build and pack the plugin WITHOUT publishing, so every push and pull request gets a downloadable,
+# unsigned .b3 that can be dropped onto the Bespok3d app to sideload. Driven by the same reusable
+# Bespok3d build Action (b3-builder) the Bespok3d plugin repos use, with publish: 'false'.
+on:
+  pull_request:
+  push:
+    paths:
+      - manifest.json
+      - 'files/**'
+      - 'doc/**'
+      - 'tests/**'
+      - .github/workflows/pr-build.yml
+
+concurrency:
+  group: pr-build-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Bespok3d/b3-builder@cbd9fa107cb82699603d4f1f3e7884b514c5e1e6
+        with:
+          unit: plugin
+          publish: 'false'
+          atom-repo: ${{ github.repository }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: u1-paxx-ab-b3
+          path: |
+            dist/*.b3
+            dist/*.atom.json
+          if-no-files-found: error

@@ -1,0 +1,27 @@
+name: pr-gate
+
+# Every pull request and push runs this repo's own check suite (scripts/check.sh): the wrapper's shell
+# tests plus the shared Bespok3d detectors from the lib_bespok3d submodule. Check-only: it builds,
+# signs and publishes nothing, and holds no secret.
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: Fetch the shared-tooling submodule
+        run: git submodule update --init --recursive
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Repo gate (shared detectors + check suite)
+        run: bash scripts/check.sh

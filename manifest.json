@@ -1,0 +1,78 @@
+{
+  "name": "u1-paxx-ab",
+  "title": "Paxx A/B Flip",
+  "version": "0.1.0",
+  "author": "justinh-rahb",
+  "description": "Installs paxx12's Extended Firmware on a Snapmaker U1 without a USB stick, then boots into it. The U1 keeps two copies of its operating system, slot A and slot B, and only runs one at a time. This plugin downloads the Extended Firmware release you name, checks it against the sha256 you give it, and hands it to the printer's own stock updater, which writes it to the slot that is NOT running and marks that slot active. The printer then reboots into Extended Firmware, and the system you were running stays untouched in the other slot. It refuses to run unless Moonraker reports the printer idle. It installs in dry-run mode by default: the download and every check run, nothing is written. Set Mode to flash to do it for real. Snapmaker U1 only.",
+  "tagline": "Put paxx Extended Firmware on the U1's spare slot and boot into it.",
+  "category": "system",
+  "channel": "testing",
+  "printer_specific": true,
+  "changelog": "doc/CHANGELOG.md",
+  "published_at": "2026-10-09",
+  "updated_at": "2026-10-09",
+  "source": "https://github.com/justinh-rahb/u1-paxx-ab",
+  "publisher": "PLACEHOLDER",
+  "provides": [
+    {
+      "service": "u1-paxx-ab"
+    }
+  ],
+  "require": [],
+  "conflicts": [],
+  "requires": {
+    "capabilities": [
+      "klipper-generic"
+    ],
+    "variables": [
+      {
+        "name": "PAXX_MODE",
+        "required": false,
+        "default": "dry-run"
+      },
+      {
+        "name": "PAXX_URL",
+        "required": false,
+        "default": "https://github.com/paxx12/SnapmakerU1/releases/download/v1.6.0-paxx12-22/U1_extended_1.6.0-paxx12-22_upgrade.bin"
+      },
+      {
+        "name": "PAXX_SHA256",
+        "required": true
+      }
+    ]
+  },
+  "permissions": [
+    "system-bin",
+    "managed-service"
+  ],
+  "install": {
+    "place": [
+      {
+        "class": "system-bin",
+        "src": "files/bin/paxx-ab-run"
+      },
+      {
+        "class": "system-bin",
+        "src": "files/bin/paxx-ab-flipback"
+      }
+    ],
+    "service": [
+      {
+        "name": "u1-paxx-ab",
+        "command": "/bin/sh",
+        "args": [
+          "$BESPOK3D/bin/paxx-ab-run",
+          "$PAXX_MODE",
+          "$PAXX_URL",
+          "$PAXX_SHA256"
+        ],
+        "autostart": true
+      }
+    ],
+    "restart": []
+  },
+  "conflict_resolutions": [],
+  "files": [],
+  "license": "https://github.com/justinh-rahb/u1-paxx-ab/blob/master/doc/LICENSE",
+  "attributions": "# Attributions - u1-paxx-ab\n\n**Plugin author:** justinh-rahb\n\nDownloads paxx12's Extended Firmware and installs it with the U1's own stock updater.\n\n| Upstream project | Author | Licence | Needed at runtime | Code ships in this package |\n| --- | --- | --- | --- | --- |\n| SnapmakerU1 Extended Firmware | paxx12 and contributors | GPL-3.0 | yes, downloaded at run time | no |\n| Snapmaker U1 stock firmware, `updateEngine`, `upfileUnpack`, `systemUpgrade.sh` | Snapmaker | per the firmware | yes | no |\n\nNothing from either ships in this package: the firmware is downloaded from paxx12's GitHub release you name,\nand the plugin calls the updater tools already on the printer.\n"
+}

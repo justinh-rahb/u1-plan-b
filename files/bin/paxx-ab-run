@@ -1,0 +1,157 @@
+#!/bin/sh
+# paxx-ab-run <mode> <image-url> <sha256>: downloads a paxx12 Extended Firmware upgrade package,
+# verifies it, writes its system image to the U1's non-booted A/B slot with the stock updater, and
+# reboots into it. <mode> is `dry-run` (every check and the download, but nothing is written to a
+# partition) or `flash`.
+#
+# How the U1 does A/B: the eMMC holds uboot_a/_b, boot_a/_b and system_a/_b (parameter.txt in the
+# stock image), the running slot is `android_slotsufix=_a|_b` on /proc/cmdline, and the bootloader
+# picks a slot from the misc partition. The stock updater /home/lava/bin/systemUpgrade.sh, in its
+# `upgrade_soc`, does exactly this to install a new system:
+#
+#   updateEngine --image_url=<update.img> --update   # writes the OTHER slot and marks it active
+#   rm -f /oem/.printer_data /oem/.debug             # additional_operations_before_active
+#   reboot
+#
+# and on the next boot /etc/init.d/S99_bootcontrol runs `updateEngine --misc=now` to commit the slot
+# it came up on. This script runs that same sequence and nothing else that writes to the eMMC. The
+# MCUs are not flashed here: the new system's own S60klipper runs `systemUpgrade.sh check-restore`
+# at boot, which flashes the MCU firmware that system ships with.
+#
+# The upgrade package is the same `U1_extended_<ver>_upgrade.bin` a USB "Local Update" takes. The
+# stock `upfileUnpack` extracts `update.img` (the Rockchip image updateEngine reads) from it.
+#
+# Runs as root under the Bespok3d daemon as a managed service that starts at every boot, so it is
+# idempotent: once a package with this sha256 has been written, later runs exit at once.
+#
+# Test seams: PAXX_AB_CMDLINE, PAXX_AB_OEM, PAXX_AB_WORK and PAXX_AB_STATE override the paths below,
+# and every tool it calls is found on PATH.
+set -u
+
+MODE="${1:-}"
+IMAGE_URL="${2:-}"
+IMAGE_SHA256="${3:-}"
+
+CMDLINE="${PAXX_AB_CMDLINE:-/proc/cmdline}"
+OEM_DIR="${PAXX_AB_OEM:-/oem}"
+WORK_DIR="${PAXX_AB_WORK:-/userdata/.paxx-ab}"
+STATE_DIR="${PAXX_AB_STATE:-/userdata/bespok3d/var/lib/u1-paxx-ab}"
+MOONRAKER_URL="${PAXX_AB_MOONRAKER:-http://127.0.0.1:7125}"
+# Seconds to wait for Moonraker to answer at boot before giving up without flashing.
+MOONRAKER_WAIT="${PAXX_AB_MOONRAKER_WAIT:-120}"
+# The package is ~250 MB and unpacks to about the same again.
+MIN_FREE_KB=700000
+URL_PREFIX="https://github.com/paxx12/SnapmakerU1/releases/download/"
+
+log() { echo "paxx-ab-run: $*"; }
+die() { echo "paxx-ab-run: $*" >&2; exit 1; }
+
+case "$MODE" in
+  dry-run | flash) ;;
+  *) die "mode must be dry-run or flash, got: $MODE" ;;
+esac
+# Only paxx12's own releases: this package becomes the printer's operating system.
+case "$IMAGE_URL" in
+  "$URL_PREFIX"*_upgrade.bin) ;;
+  *) die "image URL must be a paxx12 release asset ending in _upgrade.bin ($URL_PREFIX...), got: $IMAGE_URL" ;;
+esac
+case "$IMAGE_URL" in
+  *[!A-Za-z0-9./:_-]*) die "image URL has characters outside A-Z a-z 0-9 . / : _ -: $IMAGE_URL" ;;
+esac
+IMAGE_SHA256="$(echo "$IMAGE_SHA256" | tr 'A-F' 'a-f')"
+case "$IMAGE_SHA256" in
+  *[!0-9a-f]* | '') die "sha256 must be 64 hex characters, got: $IMAGE_SHA256" ;;
+esac
+[ "${#IMAGE_SHA256}" -eq 64 ] || die "sha256 must be 64 hex characters, got ${#IMAGE_SHA256}"
+
+DONE_MARKER="$STATE_DIR/written-$IMAGE_SHA256"
+if [ -e "$DONE_MARKER" ]; then
+  log "package $IMAGE_SHA256 was already written to slot $(cat "$DONE_MARKER"), nothing to do"
+  exit 0
+fi
+
+# _a or _b from the kernel command line, the same two spellings systemUpgrade.sh accepts.
+current_slot() {
+  # shellcheck disable=SC2013 # the command line is one line of space-separated words
+  for word in $(cat "$CMDLINE"); do
+    case "$word" in
+      android_slotsufix=* | androidboot.slot_suffix=*) echo "${word#*=}"; return 0 ;;
+    esac
+  done
+  return 1
+}
+slot="$(current_slot)" || die "no slot suffix on $CMDLINE: not an A/B U1, refusing"
+case "$slot" in
+  _a) other_slot=_b ;;
+  _b) other_slot=_a ;;
+  *) die "unexpected slot suffix '$slot' on $CMDLINE, refusing" ;;
+esac
+log "booted from slot $slot, will write slot $other_slot"
+
+for tool in updateEngine upfileUnpack curl sha256sum df reboot; do
+  command -v "$tool" > /dev/null 2>&1 || die "required tool not found: $tool"
+done
+
+# Refuses unless Moonraker positively reports an idle printer: flashing restarts the printer.
+print_state() {
+  curl -fsS --max-time 5 "$MOONRAKER_URL/printer/objects/query?print_stats=state" 2> /dev/null \
+    | sed -n 's/.*"state": *"\([a-z_]*\)".*/\1/p'
+}
+waited=0
+while :; do
+  state="$(print_state)"
+  [ -n "$state" ] && break
+  [ "$waited" -lt "$MOONRAKER_WAIT" ] || die "Moonraker did not report a print state after ${MOONRAKER_WAIT}s, refusing"
+  sleep 5
+  waited=$((waited + 5))
+done
+case "$state" in
+  standby | complete | cancelled | error) log "printer is idle ($state)" ;;
+  *) die "printer is not idle (print state: $state), refusing" ;;
+esac
+
+mkdir -p "$WORK_DIR" "$STATE_DIR" || die "cannot create $WORK_DIR or $STATE_DIR"
+free_kb="$(df -k "$WORK_DIR" | awk 'NR == 2 { print $4 }')"
+case "$free_kb" in
+  '' | *[!0-9]*) die "cannot read free space for $WORK_DIR" ;;
+esac
+[ "$free_kb" -ge "$MIN_FREE_KB" ] || die "need ${MIN_FREE_KB} KB free under $WORK_DIR, have $free_kb KB"
+
+cleanup_work() { rm -rf "$WORK_DIR"; }
+
+package="$WORK_DIR/upgrade.bin"
+log "downloading $IMAGE_URL"
+curl -fsSL --retry 3 -o "$package.part" "$IMAGE_URL" || { cleanup_work; die "download failed: $IMAGE_URL"; }
+actual_sha256="$(sha256sum "$package.part" | awk '{ print $1 }')"
+if [ "$actual_sha256" != "$IMAGE_SHA256" ]; then
+  cleanup_work
+  die "sha256 mismatch: expected $IMAGE_SHA256, got $actual_sha256"
+fi
+mv "$package.part" "$package"
+log "sha256 verified"
+
+unpack_dir="$WORK_DIR/unpack"
+upfileUnpack -i "$package" -o "$unpack_dir" || { cleanup_work; die "upfileUnpack failed on $package"; }
+[ -s "$unpack_dir/update.img" ] || { cleanup_work; die "package has no update.img"; }
+rm -f "$package"
+
+if [ "$MODE" = dry-run ]; then
+  log "dry run: would run: updateEngine --image_url=$unpack_dir/update.img --update"
+  log "dry run: would remove $OEM_DIR/.printer_data and $OEM_DIR/.debug, then reboot into slot $other_slot"
+  cleanup_work
+  exit 0
+fi
+
+log "writing slot $other_slot: updateEngine --image_url=$unpack_dir/update.img --update"
+if ! updateEngine --image_url="$unpack_dir/update.img" --update; then
+  cleanup_work
+  die "updateEngine failed; slot $slot is untouched and stays active"
+fi
+updateEngine --misc=display || true
+# The marker is written before the reboot, so the next boot (in either slot) does not write again.
+echo "$other_slot" > "$DONE_MARKER"
+rm -f "$OEM_DIR/.printer_data" "$OEM_DIR/.debug"
+cleanup_work
+sync
+log "slot $other_slot written and marked active, rebooting"
+reboot
